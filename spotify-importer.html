@@ -342,11 +342,14 @@
   const getMe = () => spotifyFetch('/me');
 
   /** @param {string} userId @param {string} name */
-  const createPlaylist = (userId, name) =>
-    spotifyFetch(`/users/${userId}/playlists`, {
+  const createPlaylist = async (userId, name) => {
+    const res = await spotifyFetch(`/users/${userId}/playlists`, {
       method: 'POST',
-      body: JSON.stringify({ name, public: false }),
+      body: JSON.stringify({ name, public: false, description: 'Imported from Yandex Music' }),
     });
+    if (!res.id) throw new Error(`Failed to create playlist: ${JSON.stringify(res)}`);
+    return res;
+  };
 
   /** @param {string} query @returns {Promise<string|null>} Spotify URI */
   const searchTrack = async (query) => {
@@ -391,10 +394,24 @@
     logLine(`Starting import of ${tracks.length} tracks...`);
 
     const me = await getMe();
-    if (!me.id) { logLine('Auth error. Reconnect.', 'err'); return; }
+    if (!me.id) {
+      logLine(`Auth error — disconnect and reconnect. Details: ${JSON.stringify(me)}`, 'err');
+      document.getElementById('btn-start').disabled = false;
+      return;
+    }
 
-    const playlist = await createPlaylist(me.id, playlistName);
-    logLine(`Playlist created: ${playlist.name}`);
+    logLine(`Logged in as ${me.display_name} (${me.id})`);
+
+    let playlist;
+    try {
+      playlist = await createPlaylist(me.id, playlistName);
+    } catch (e) {
+      logLine(e.message, 'err');
+      document.getElementById('btn-start').disabled = false;
+      return;
+    }
+
+    logLine(`Playlist created: ${playlist.name} · id: ${playlist.id}`);
 
     /** @type {string[]} */
     const uris = [];
