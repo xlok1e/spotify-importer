@@ -341,9 +341,9 @@
 
   const getMe = () => spotifyFetch('/me');
 
-  /** @param {string} userId @param {string} name */
-  const createPlaylist = async (userId, name) => {
-    const res = await spotifyFetch(`/users/${userId}/playlists`, {
+  /** @param {string} name */
+  const createPlaylist = async (name) => {
+    const res = await spotifyFetch('/me/playlists', {
       method: 'POST',
       body: JSON.stringify({ name, public: false, description: 'Imported from Yandex Music' }),
     });
@@ -404,7 +404,7 @@
 
     let playlist;
     try {
-      playlist = await createPlaylist(me.id, playlistName);
+      playlist = await createPlaylist(playlistName);
     } catch (e) {
       logLine(e.message, 'err');
       document.getElementById('btn-start').disabled = false;
