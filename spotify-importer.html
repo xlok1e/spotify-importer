@@ -358,11 +358,12 @@
   };
 
   /** @param {string} playlistId @param {string[]} uris */
-  const addTracks = (playlistId, uris) =>
-    spotifyFetch(`/playlists/${playlistId}/tracks`, {
+  const addTracks = (playlistId, uris) => {
+    const query = uris.map(u => encodeURIComponent(u)).join('%2C');
+    return spotifyFetch(`/playlists/${playlistId}/tracks?uris=${query}`, {
       method: 'POST',
-      body: JSON.stringify({ uris }),
     });
+  };
 
   // ─── Import flow ─────────────────────────────────────────────────────────────
 
