@@ -165,7 +165,7 @@
 <body>
 <div class="card">
   <h1>Spotify Importer</h1>
-  <p class="subtitle">TXT → Spotify playlist · Artist - Title format</p>
+  <p class="subtitle">TXT → Spotify playlist · Исполнитель - Название</p>
 
   <!-- Step 1: Client ID -->
   <div class="section" id="step-auth">
@@ -180,8 +180,8 @@
 
   <!-- Step 2: Import -->
   <div class="section" id="step-import" style="display:none">
-    <label>Playlist name</label>
-    <input type="text" id="playlist-name" placeholder="My Yandex Playlist" />
+    <label>Название плейлиста</label>
+    <input type="text" id="playlist-name" placeholder="Мой плейлист" />
 
     <label>TXT file</label>
     <div class="file-drop" id="drop-zone">
@@ -189,8 +189,8 @@
       <input type="file" id="file-input" accept=".txt" />
     </div>
 
-    <button class="primary" id="btn-start" disabled>Start Import</button>
-    <button id="btn-logout">Disconnect</button>
+    <button class="primary" id="btn-start" disabled>Начать импорт</button>
+    <button id="btn-logout">Отключиться</button>
   </div>
 
   <div class="progress" id="progress">
@@ -357,13 +357,12 @@
     return data.tracks?.items?.[0]?.uri ?? null;
   };
 
-  /** @param {string} playlistId @param {string[]} uris */
-  const addTracks = (playlistId, uris) => {
-    const query = uris.map(u => encodeURIComponent(u)).join('%2C');
-    return spotifyFetch(`/playlists/${playlistId}/tracks?uris=${query}`, {
+  /** @param {string} playlistId @param {string[]} uris — max 100 per request */
+  const addTracks = (playlistId, uris) =>
+    spotifyFetch(`/playlists/${playlistId}/items`, {
       method: 'POST',
+      body: JSON.stringify({ uris }),
     });
-  };
 
   // ─── Import flow ─────────────────────────────────────────────────────────────
 
@@ -392,16 +391,16 @@
     log.classList.add('visible');
     progress.classList.add('visible');
 
-    logLine(`Starting import of ${tracks.length} tracks...`);
+    logLine(`Поиск ${tracks.length} треков...`);
 
     const me = await getMe();
     if (!me.id) {
-      logLine(`Auth error — disconnect and reconnect. Details: ${JSON.stringify(me)}`, 'err');
+      logLine(`Ошибка авторизации. Переподключись.`, 'err');
       document.getElementById('btn-start').disabled = false;
       return;
     }
 
-    logLine(`Logged in as ${me.display_name} (${me.id})`);
+    logLine(`Вошёл как ${me.display_name}`);
 
     let playlist;
     try {
@@ -412,7 +411,7 @@
       return;
     }
 
-    logLine(`Playlist created: ${playlist.name} · id: ${playlist.id}`);
+    logLine(`Плейлист создан: ${playlist.name}`);
 
     /** @type {string[]} */
     const uris = [];
@@ -434,19 +433,18 @@
         logLine(`✗ ${query}`, 'skip');
       }
 
-      // Batch add every 100 tracks (Spotify limit)
+      // Батч по 100 треков (лимит эндпоинта)
       if (uris.length === 100) {
         await addTracks(playlist.id, [...uris]);
         uris.length = 0;
       }
 
-      // Rate limit safety
       await sleep(150);
     }
 
     if (uris.length) await addTracks(playlist.id, uris);
 
-    logLine(`Done. Found: ${found}, not found: ${notFound}`, 'info');
+    logLine(`Готово. Найдено: ${found}, не найдено: ${notFound}`, 'info');
     logLine(`→ open.spotify.com/playlist/${playlist.id}`, 'ok');
     document.getElementById('btn-start').disabled = false;
   });
