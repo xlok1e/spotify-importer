@@ -438,7 +438,6 @@
 
     logLine(`Плейлист создан: ${playlist.name}`);
 
-    /** @type {string[]} */
     const uris = [];
     let found = 0;
     let notFound = 0;
@@ -448,7 +447,24 @@
       progressText.textContent = `${i + 1} / ${tracks.length}`;
       bar.style.width = `${((i + 1) / tracks.length) * 100}%`;
 
-      const uri = await searchTrack(query);
+      let uri = null;
+      let retries = 0;
+      while (retries < 3) {
+        const res = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=1`, {
+          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        });
+        if (res.status === 429) {
+          const wait = parseInt(res.headers.get('Retry-After') || '5') * 1000;
+          logLine(`Rate limit, ждём ${wait / 1000}с...`, 'info');
+          await sleep(wait);
+          retries++;
+          continue;
+        }
+        const data = await res.json();
+        uri = data.tracks?.items?.[0]?.uri ?? null;
+        break;
+      }
+
       if (uri) {
         uris.push(uri);
         found++;
@@ -458,17 +474,36 @@
         logLine(`✗ ${query}`, 'skip');
       }
 
-      // Батч по 100 треков (лимит эндпоинта)
-      if (uris.length === 100) {
-        await ensureFreshToken();
-        await addTracks(playlist.id, [...uris]);
-        uris.length = 0;
-      }
-
-      await sleep(150);
+      await sleep(300);
     }
 
-    if (uris.length) await addTracks(playlist.id, uris);
+    // Добавляем все найденные треки батчами по 100 после завершения поиска
+    logLine(`Добавляем ${uris.length} треков в плейлист...`, 'info');
+    const allUris = [...uris];
+    for (let i = 0; i < allUris.length; i += 100) {
+      await ensureFreshToken();
+      const batch = allUris.slice(i, i + 100);
+      let added = false;
+      let retries = 0;
+      while (!added && retries < 3) {
+        const res = await fetch(`https://api.spotify.com/v1/playlists/${playlist.id}/items`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uris: batch }),
+        });
+        if (res.status === 429) {
+          const wait = parseInt(res.headers.get('Retry-After') || '5') * 1000;
+          logLine(`Rate limit, ждём ${wait / 1000}с...`, 'info');
+          await sleep(wait);
+          retries++;
+          continue;
+        }
+        added = true;
+      }
+      progressText.textContent = `Батч ${Math.floor(i / 100) + 1} / ${Math.ceil(allUris.length / 100)}`;
+      bar.style.width = `${Math.min(((i + 100) / allUris.length) * 100, 100)}%`;
+      await sleep(500);
+    }
 
     logLine(`Готово. Найдено: ${found}, не найдено: ${notFound}`, 'info');
     logLine(`→ open.spotify.com/playlist/${playlist.id}`, 'ok');
